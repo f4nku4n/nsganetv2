@@ -7,9 +7,10 @@ import numpy as np
 import utils
 from codebase.networks import NSGANetV2
 from codebase.run_manager import get_run_config
-from ofa.elastic_nn.networks import OFAMobileNetV3
-from ofa.imagenet_codebase.run_manager import RunManager
-from ofa.elastic_nn.modules.dynamic_op import DynamicSeparableConv2d
+from ofa.imagenet_classification.elastic_nn.networks import OFAMobileNetV3
+from ofa.imagenet_classification.run_manager import RunManager
+from ofa.imagenet_classification.elastic_nn.modules.dynamic_op import DynamicSeparableConv2d
+from ofa.utils.layers import set_layer_from_config, MBConvLayer, ConvLayer, IdentityLayer, LinearLayer, ResidualBlock
 
 import warnings
 warnings.simplefilter("ignore")
@@ -94,12 +95,12 @@ class OFAEvaluator:
             raise ValueError
 
         self.engine = OFAMobileNetV3(
-            n_classes=n_classes,
-            dropout_rate=0, width_mult_list=self.width_mult, ks_list=self.kernel_size,
+            n_classes=1000,
+            dropout_rate=0, width_mult=self.width_mult, ks_list=self.kernel_size,
             expand_ratio_list=self.exp_ratio, depth_list=self.depth)
 
         init = torch.load(model_path, map_location='cpu')['state_dict']
-        self.engine.load_weights_from_net(init)
+        self.engine.load_state_dict(init)
 
     def sample(self, config=None):
         """ randomly sample a sub-network """
@@ -152,9 +153,11 @@ class OFAEvaluator:
         if n_epochs > 0:
             # for datasets other than the one supernet was trained on (ImageNet)
             # a few epochs of training need to be applied
-            subnet.reset_classifier(
-                last_channel=subnet.classifier.in_features,
-                n_classes=run_config.data_provider.n_classes, dropout_rate=cfgs.drop_rate)
+            # subnet.reset_classifier(
+            #     last_channel=subnet.classifier.in_features,
+            #     n_classes=run_config.data_provider.n_classes, dropout_rate=cfgs.drop_rate)
+            subnet.classifier = LinearLayer(in_features=subnet.classifier.in_features,
+                out_features=run_config.data_provider.n_classes, dropout_rate=cfgs.drop_rate)
 
         run_manager = RunManager(log_dir, subnet, run_config, init=False)
         if reset_running_statistics:
@@ -164,9 +167,9 @@ class OFAEvaluator:
         if n_epochs > 0:
             subnet = run_manager.train(cfgs)
 
-        loss, top1, top5 = run_manager.validate(net=subnet, is_test=is_test, no_logs=no_logs)
+        loss, acc = run_manager.validate(net=subnet, is_test=is_test, no_logs=no_logs)
 
-        info['loss'], info['top1'], info['top5'] = loss, top1, top5
+        info['loss'], info['top1'], info['top5'] = loss, acc[0], acc[1]
 
         save_path = os.path.join(log_dir, 'net.stats') if cfgs.save is None else cfgs.save
         if cfgs.save_config:

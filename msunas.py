@@ -8,9 +8,9 @@ from utils import get_correlation
 from evaluator import OFAEvaluator, get_net_info
 
 from pymoo.optimize import minimize
-from pymoo.model.problem import Problem
+from pymoo.core.problem import Problem
 from pymoo.factory import get_performance_indicator
-from pymoo.algorithms.so_genetic_algorithm import GA
+from pymoo.algorithms.soo.nonconvex.ga import GA
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
 from pymoo.factory import get_algorithm, get_crossover, get_mutation
 
@@ -206,7 +206,7 @@ class MSuNAS:
         # kick-off the search
         res = minimize(
             problem, method, termination=('n_gen', 20), save_history=True, verbose=True)
-        
+
         # check for duplicates
         not_duplicate = np.logical_not(
             [x in [x[0] for x in archive] for x in [self.search_space.decode(x) for x in res.pop.get("X")]])
@@ -283,6 +283,7 @@ class AuxiliarySingleLevelProblem(Problem):
 
 class SubsetProblem(Problem):
     """ select a subset to diversify the pareto front """
+
     def __init__(self, candidates, archive, K):
         super().__init__(n_var=len(candidates), n_obj=1,
                          n_constr=1, xl=0, xu=1, type_var=np.bool)
